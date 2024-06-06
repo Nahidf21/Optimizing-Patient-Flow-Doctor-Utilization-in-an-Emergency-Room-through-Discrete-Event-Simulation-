@@ -1,0 +1,2 @@
+# Optimizing-Patient-Flow-Doctor-Utilization-in-an-Emergency-Room-through-Discrete-Event-Simulation-
+Optimize ER patient flow and doctor utilization using simulation over 20 days. Address challenges in prioritizing patients needing immediate attention (NIA) and those who can wait (CW). Analyze patient data, simulate current operations, propose improvements, and compare results to reduce waiting times and boost efficiency.
