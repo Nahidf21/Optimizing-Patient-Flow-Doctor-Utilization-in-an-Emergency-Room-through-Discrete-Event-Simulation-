@@ -1,0 +1,140 @@
+---
+title: "Emergency Room"
+author: "Nahid Ferdous"
+date: "2024-05-04"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+# Identyfy the interArrival distribution 
+```{r}
+data1 <- read.csv("Case5_emergency-room.csv")
+
+hist(data1$interArrival)
+plot(data1$interArrival, type = "b")
+acf(data1$interArrival)
+
+library(fitdistrplus)
+descdist(data1$interArrival, discrete = FALSE)
+
+fit.gamma <- fitdist(data1$interArrival, "gamma")
+summary(fit.gamma)
+gofstat(fit.gamma)
+plot(fit.gamma)
+
+```
+
+# Calculate the frequency of each category in the 'type' variable
+```{r}
+type_counts <- table(data1$type)
+
+# Calculate the proportions of each category
+type_proportions <- prop.table(type_counts)
+
+# Print the proportions
+print(type_proportions)
+
+```
+
+
+
+```{r}
+library(simmer)
+
+set.seed(123)
+envs <- lapply(1:20, function(i) {
+  env <- simmer("Emergency Room") %>%
+    add_resource("doctor", 5)
+  
+  patient <- trajectory("patient path") %>%
+    branch(
+      function() sample(c(1, 2), size = 1, replace = TRUE, prob = c(0.82, 0.18)), continue = c(TRUE, TRUE),
+      trajectory("NIA") %>%
+        set_attribute("priority", 3) %>%
+        set_prioritization(c(5, 7, TRUE)) %>%
+        seize("doctor", 1) %>%
+        timeout(function() runif(1, 10, 70)) %>%
+        release("doctor", 1) %>%
+        
+        set_attribute("priority", 2) %>%
+        set_prioritization(c(4, 7, TRUE)) %>%
+        seize("doctor", 1) %>%
+        timeout(function() runif(1, 10, 50)) %>%
+        release("doctor", 1),
+      
+      trajectory("CW") %>%
+        set_attribute("priority", 1) %>%
+        set_prioritization(c(3, 7, TRUE)) %>%
+        seize("doctor", 1) %>%
+        timeout(function() runif(1, 5, 25)) %>%
+        release("doctor", 1) %>%
+        
+        set_attribute("priority", 2) %>%
+        set_prioritization(c(4, 7, TRUE)) %>%
+        seize("doctor", 1) %>%
+        timeout(function() runif(1, 5, 15)) %>%
+        release("doctor", 1)
+    )
+  env %>%
+    add_generator("patient", patient, function() rgamma(1, shape = 0.96354630, rate = 0.06388), mon = 2)
+  env %>%
+    run(1440)
+})
+
+```
+
+
+# 01 Average of discharged patients per replication
+```{r}
+
+patientAttr <- get_mon_attributes(envs)
+colMeans(table(patientAttr$replication, patientAttr$value))
+
+x1 <- get_mon_arrivals(envs)
+x2<- get_mon_attributes(envs)
+
+all <- merge(x1, x2, by= c("name", "replication"), all= T)
+priority1 <- na.omit(subset(all, all$value ==1 ))
+priority2 <- na.omit(subset(all, all$value ==2))
+priority3 <- na.omit(subset(all, all$value ==3))
+priority1.waiting <- (priority1$end_time - priority1$start_time) - priority1$activity_time
+priority3.waiting <- (priority3$end_time - priority3$start_time) - priority3$activity_time
+print("Mean of waiting time for type CW")
+mean(priority1.waiting)
+print("Mean of waiting time for type NIA")
+mean(priority3.waiting)
+# Average waiting time per replication for each type
+priority1.waiting.rep <- aggregate(priority1.waiting, by = list(priority1$replication), mean)
+priority3.waiting.rep <- aggregate(priority3.waiting, by = list(priority3$replication), mean)
+
+boxplot(priority1.waiting.rep$x, priority3.waiting.rep$x, names = c("CW", "NIA"), main = "Waiting Time per Replication")
+
+```
+# 02 Average flow time of each type of patient 
+```{r}
+priority1.flowTime <- (priority1$end_time - priority1$start_time)
+priority2.flowTime <- (priority2$end_time - priority2$start_time)
+priority3.flowTime <- (priority3$end_time - priority3$start_time)
+
+print("Mean of flow time for type CW")
+mean(priority1.flowTime)
+print("Mean of flow time for type NIA")
+mean(priority3.flowTime)
+
+```
+# 3 utilization 
+```{r}
+library(simmer.plot)
+library(gridExtra)
+
+resources <- get_mon_resources(envs)
+arrivals <- get_mon_arrivals(envs)
+p1 <- plot(resources, metric = "utilization")
+p2 <- plot(resources, metric = "usage")
+p3 <- plot(arrivals, metric = "activity_time")
+p4 <- plot(arrivals, metric = "waiting_time")
+grid.arrange(p1,p2,p3,p4)
+
+```
